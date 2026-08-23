@@ -1,0 +1,21 @@
+{
+  "status": "success",
+  "meta": {
+    "activity_id": "act_9f31c2",
+    "granularity": 100
+  },
+  "data": {
+    "result": {
+      "cells": [
+        {"latitude": 40.7128, "longitude": -74.0060, "temperature": 34.2},
+        {"latitude": 40.7130, "longitude": -74.0055, "temperature": 33.8},
+        {"lat": 40.7133, "lon": -74.0050, "temp": 35.1},
+        {"latitude": 40.7126, "longitude": -74.0065, "value": 32.9},
+        {"y": 40.7140, "x": -74.0048, "t": 36.0},
+        {"latitude": 40.7121, "longitude": -74.0072, "temperature": 31.7},
+        {"lat": 40.7137, "lon": -74.0042, "temp_c": 34.9},
+        {"latitude": 40.7119, "longitude": -74.0078, "temperature": 30.5}
+      ]
+    }
+  }
+}
