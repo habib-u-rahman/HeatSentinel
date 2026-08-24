@@ -1,0 +1,32 @@
+fastapi
+uvicorn[standard]
+httpx
+pydantic
+pydantic-settings
+tenacity
+python-dotenv
+pytest
+pytest-asyncio
+respx
+numpy
+pandas
+osmnx
+networkx
+scipy
+shapely
+geopandas
+
+# vision module (Task 2) -- CPU-only torch wheels to keep the install small
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+transformers
+ultralytics
+pillow
+tqdm
+pyarrow
+piexif
+
+# ML module (Task 5)
+scikit-learn
+joblib
