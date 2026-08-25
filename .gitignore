@@ -1,0 +1,11 @@
+.env
+data/cache/
+data/raw/
+data/street_images/
+data/overlays/
+__pycache__/
+node_modules/
+*.pkl
+*.pt
+routes.geojson
+frontend/dist/
