@@ -1,0 +1,73 @@
+/* @import MUST precede every other rule per the CSS spec -- placed after the
+   @tailwind directives, the browser silently drops it as invalid, which is
+   why Leaflet's own tile/pane positioning rules were missing entirely. */
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background-color: #090d16;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* numeric readouts: heavy weight, tabular figures so digits don't jitter */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.label-caps {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+/* Leaflet chrome, re-skinned for the dark theme */
+.leaflet-container {
+  background: #090d16;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* Tooltip dark theme styling */
+.heatsentinel-tooltip {
+  background: #111827;
+  color: #f1f5f9;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  padding: 8px 12px;
+}
+.heatsentinel-tooltip.leaflet-tooltip::before {
+  border-top-color: #374151;
+}
+
+.leaflet-control-scale-line {
+  background: rgba(17, 24, 39, 0.85) !important;
+  color: #94a3b8 !important;
+  border-color: #374151 !important;
+}
+
+/* thin, unobtrusive scrollbar for panels */
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
