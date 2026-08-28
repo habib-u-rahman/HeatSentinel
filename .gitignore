@@ -3,9 +3,14 @@ data/cache/
 data/raw/
 data/street_images/
 data/overlays/
+data/aois/
 __pycache__/
 node_modules/
 *.pkl
 *.pt
 routes.geojson
 frontend/dist/
+backend/.venv/
+backend/.pytest_cache/
+backend/cache/
+.claude/scheduled_tasks.lock
