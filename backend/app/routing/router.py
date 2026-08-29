@@ -101,6 +101,13 @@ def _route_geojson(node_path: list[int], graph: nx.MultiDiGraph) -> dict:
     }
 
 
+# Bounded: grid.observed_at is effectively unique per request (fixture grids
+# stamp it with datetime.now()) and lambda_heat is a continuous UI-slider
+# value, so an unbounded cache here grows forever -- each entry holds a full
+# per-edge cost array (~7-8k edges), making this the largest contributor to
+# a confirmed gradual OOM on Render's free tier. FIFO eviction via dict
+# insertion order once the cap is hit.
+_EDGE_COST_CACHE_MAX = 50
 _edge_cost_cache: dict[tuple, EdgeCostResult] = {}
 
 
@@ -128,6 +135,8 @@ def get_or_build_edge_costs(
         kwargs["surface_profiles_path"] = surface_profiles_path
 
     result = build_edge_costs(graph, grid, lambda_heat, **kwargs)
+    if len(_edge_cost_cache) >= _EDGE_COST_CACHE_MAX:
+        _edge_cost_cache.pop(next(iter(_edge_cost_cache)))
     _edge_cost_cache[cache_key] = result
     return result
 

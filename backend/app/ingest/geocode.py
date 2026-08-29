@@ -36,6 +36,10 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 # 1 req/s budget.
 _last_call_lock = threading.Lock()
 _last_call_at = 0.0
+# Bounded defensively (naturally low-cardinality in practice -- keyed by
+# normalized query text, not a per-request-unique value -- but capped anyway
+# so a burst of distinct queries can't grow this unboundedly either).
+_GEOCODE_CACHE_MAX = 1000
 _cache: dict[str, Optional["GeocodeMatch"]] = {}
 
 
@@ -136,6 +140,8 @@ class NominatimClient:
             f"{NOMINATIM_BASE}/search", {"q": query, "format": "json", "limit": 1, "accept-language": "en"}
         )
         results = response.json()
+        if len(_cache) >= _GEOCODE_CACHE_MAX:
+            _cache.pop(next(iter(_cache)))
         if not results:
             _cache[key] = None
             return None

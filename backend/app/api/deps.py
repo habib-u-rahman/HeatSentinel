@@ -143,6 +143,14 @@ def get_grid_for_timestamp(bbox: str, at: datetime, granularity_m: int, allow_fi
     return generate_grid(bbox, granularity_m, at, seed=0)
 
 
+# Bounded (not just a plain dict): observed_at is effectively unique per
+# request (fixture grids stamp it with datetime.now()), so an unbounded
+# cache here grows forever and was confirmed causing gradual OOM kills on
+# Render's free tier under sustained traffic. FIFO eviction via dict
+# insertion order once the cap is hit -- exact recency tracking isn't worth
+# the complexity for a cache that only exists to keep one grid snapshot's
+# requests consistent with each other.
+_WEATHER_CONTEXT_CACHE_MAX = 500
 _weather_context_cache: dict[tuple, dict] = {}
 
 
@@ -186,6 +194,8 @@ def get_weather_context(bbox: str, observed_at: datetime, openmeteo_client: Open
             "relative_humidity": DEFAULT_RH_PCT,
         }
 
+    if len(_weather_context_cache) >= _WEATHER_CONTEXT_CACHE_MAX:
+        _weather_context_cache.pop(next(iter(_weather_context_cache)))
     _weather_context_cache[cache_key] = context
     return context
 

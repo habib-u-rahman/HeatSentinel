@@ -122,6 +122,10 @@ def _load_thermal_load_by_edge(
     return dict(zip(joined["nearest_edge_key"], joined["thermal_load_score"]))
 
 
+# Bounded for the same reason as app.api.deps._weather_context_cache:
+# observed_at is effectively unique per request, so an unbounded dict here
+# grows forever -- confirmed causing gradual OOM kills on Render's free tier.
+_AOI_HUMIDITY_CACHE_MAX = 500
 _aoi_humidity_cache: dict[tuple[str, object], float] = {}
 
 
@@ -161,6 +165,8 @@ def _fetch_aoi_humidity(bbox: str, observed_at, openmeteo_client: OpenMeteoClien
         )
         rh_pct = DEFAULT_RH_PCT
 
+    if len(_aoi_humidity_cache) >= _AOI_HUMIDITY_CACHE_MAX:
+        _aoi_humidity_cache.pop(next(iter(_aoi_humidity_cache)))
     _aoi_humidity_cache[cache_key] = rh_pct
     return rh_pct
 
