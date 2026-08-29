@@ -11,9 +11,28 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
+import types
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# osmnx eagerly imports matplotlib.pyplot at package-import time purely to
+# expose plotting helpers (ox.plot_graph etc.) that this app never calls --
+# confirmed costing ~23MB (measured: 100.5MB vs 77.1MB) on a Render
+# free-tier instance where every MB matters against the 512MB ceiling.
+# Stubbing before any app/osmnx import intercepts it safely: osmnx's own
+# import still succeeds (verified), it just never gets a real plotting
+# backend, which is fine since nothing here calls osmnx's plot functions.
+if "matplotlib" not in sys.modules:
+    _mpl_stub = types.ModuleType("matplotlib")
+    _mpl_stub.pyplot = types.ModuleType("matplotlib.pyplot")
+    _mpl_stub.colors = types.ModuleType("matplotlib.colors")
+    _mpl_stub.cm = types.ModuleType("matplotlib.cm")
+    sys.modules["matplotlib"] = _mpl_stub
+    sys.modules["matplotlib.pyplot"] = _mpl_stub.pyplot
+    sys.modules["matplotlib.colors"] = _mpl_stub.colors
+    sys.modules["matplotlib.cm"] = _mpl_stub.cm
 
 import joblib
 import pandas as pd
