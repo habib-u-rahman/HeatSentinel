@@ -3,9 +3,10 @@
 THE API IS SUBMIT-AND-POLL: you POST an AOI + time filter and get back an
 activity_id, then GET a poll endpoint until the job is done.
 
-We do NOT have confirmed API docs yet. Every constant below marked
-"VERIFY AGAINST DOCS" is a best guess based on the task brief and must be
-corrected once real responses are seen (use `--probe`, see bottom of file).
+Verified against the real API on 2026-08-29 (see --probe). Confirmed via a
+live NYC AOI, which returns real per-tile average/min/max_temperature
+features; Rawalpindi consistently returns n_cells=0 across dates/times/filter
+types, so FortyGuard's coverage does not currently include it.
 """
 
 from __future__ import annotations
@@ -28,24 +29,32 @@ from app.core.geo import bbox_to_polygon
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# VERIFY AGAINST DOCS: endpoint paths, response field locations, and status
-# values are all guesses until confirmed against real FortyGuard responses.
+# Confirmed against real FortyGuard responses (2026-08-29):
+#   POST /heatmap   {"polygon_aoi", "date_time": {"start_date","start_time",
+#                    "filter_type": <int 1-4>}, "granularity"} -> {"data":
+#                    {"activity_id"}}
+#   GET  /status/{activity_id} -> {"data": {"status": "Processing"|"Completed"|...,
+#                    "result": {"map_data": <GeoJSON FeatureCollection of
+#                    per-tile average/min/max_temperature>, "stats_data": {"n_cells"}}}}
+# filter_type must be an int 1-4 (not a free-text category); only 1 and 3
+# were confirmed to submit successfully against this account -- 2 and 4
+# returned HTTP 500. Status values are capitalized ("Completed", not "done").
 # ---------------------------------------------------------------------------
 SUBMIT_ENDPOINT = "/heatmap"  # POST
-POLL_ENDPOINT_TEMPLATE = "/heatmap/{activity_id}"  # GET
+POLL_ENDPOINT_TEMPLATE = "/status/{activity_id}"  # GET
 
 ACTIVITY_ID_PATH = ("data", "activity_id")
 STATUS_FIELD_PATH = ("data", "status")
-RESULT_FIELD_PATH = ("data",)  # what we cache / return once done
+RESULT_FIELD_PATH = ("data", "result")  # {"map_data": GeoJSON, "stats_data": {...}}
 
-STATUS_DONE_VALUES = {"done", "completed", "success", "finished"}
-STATUS_FAILED_VALUES = {"failed", "error", "cancelled"}
-STATUS_PENDING_VALUES = {"pending", "processing", "running", "queued", "in_progress"}
+STATUS_DONE_VALUES = {"Completed"}
+STATUS_FAILED_VALUES = {"Failed", "Error", "Cancelled"}
+STATUS_PENDING_VALUES = {"Pending", "Processing", "Running", "Queued", "In Progress"}
 # ---------------------------------------------------------------------------
 
 DEFAULT_TIMEOUT_S = 180
 DEFAULT_INTERVAL_S = 3.0
-DEFAULT_FILTER_TYPE = "Vehicle"
+DEFAULT_FILTER_TYPE = 1
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 

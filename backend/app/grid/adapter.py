@@ -1,12 +1,14 @@
 """Tolerant adapter: raw FortyGuard heatmap JSON -> normalized TemperatureGrid.
 
-We do NOT have a confirmed FortyGuard response schema yet (see the
-"VERIFY AGAINST DOCS" markers in app/fortyguard/client.py). Rather than guess
-a shape and stall on every field-name mismatch, this parser searches the
-payload for a list of records carrying lat/lon/temperature under any of
-several plausible key spellings, nested under any of several plausible
-container keys. Once the real schema is confirmed, only the key-spelling and
-container-key lists below should need correcting.
+Confirmed against the real API on 2026-08-29: a heatmap response is a GeoJSON
+FeatureCollection at data.result.map_data, one Polygon feature per tile, with
+average_temperature (+ min/max_temperature) in `properties`. That shape is
+handled directly by _try_geojson_polygons below (tile centroid -> point).
+
+The original flat lat/lon/temperature-record search (arbitrary key spelling,
+arbitrary container nesting) is kept as a fallback -- it's still exercised by
+tests using synthetic fixtures in an older assumed shape, and costs nothing
+to leave in place as a defensive fallback for any other payload shape.
 """
 
 from __future__ import annotations
@@ -32,8 +34,71 @@ TEMP_KEYS = ["temp", "temperature", "temp_c", "value", "t"]  # VERIFY AGAINST DO
 # blind recursive scan of the whole payload.
 CONTAINER_KEYS = ["data", "result", "results", "cells", "tiles", "points", "grid", "heatmap"]  # VERIFY AGAINST DOCS
 
+# Confirmed real field names for the GeoJSON tile shape (properties.*).
+GEOJSON_TEMP_KEYS = ["average_temperature", "temperature", "temp_c", "value"]
+
 MAX_PRETTY_PRINT_CHARS = 2000
 _MAX_SEARCH_DEPTH = 8
+
+
+def _polygon_centroid(coordinates: list) -> Optional[tuple[float, float]]:
+    """(lat, lon) centroid of a GeoJSON Polygon's exterior ring.
+
+    coordinates[0] is the exterior ring: a list of [lon, lat] pairs, first
+    and last identical (closed ring) -- a plain vertex average is a fine
+    approximation for the small, roughly-square tiles FortyGuard returns.
+    """
+    if not coordinates or not isinstance(coordinates, list):
+        return None
+    ring = coordinates[0]
+    if not isinstance(ring, list) or not ring:
+        return None
+    lons = [pt[0] for pt in ring if isinstance(pt, list) and len(pt) >= 2]
+    lats = [pt[1] for pt in ring if isinstance(pt, list) and len(pt) >= 2]
+    if not lons or not lats:
+        return None
+    return sum(lats) / len(lats), sum(lons) / len(lons)
+
+
+def _find_geojson_feature_collection(node: Any, _depth: int = 0) -> Optional[dict]:
+    """Recursively search node for a {"type": "FeatureCollection", "features": [...]}."""
+    if _depth > _MAX_SEARCH_DEPTH:
+        return None
+    if isinstance(node, dict):
+        if node.get("type") == "FeatureCollection" and isinstance(node.get("features"), list):
+            return node
+        for value in node.values():
+            found = _find_geojson_feature_collection(value, _depth + 1)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for item in node:
+            found = _find_geojson_feature_collection(item, _depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
+def _try_geojson_polygons(raw: Any) -> Optional[list[TemperatureCell]]:
+    collection = _find_geojson_feature_collection(raw)
+    if collection is None:
+        return None
+
+    cells: list[TemperatureCell] = []
+    for feature in collection["features"]:
+        if not isinstance(feature, dict):
+            continue
+        geometry = feature.get("geometry") or {}
+        properties = feature.get("properties") or {}
+        if geometry.get("type") != "Polygon":
+            continue
+        centroid = _polygon_centroid(geometry.get("coordinates"))
+        temp = _first_present(properties, GEOJSON_TEMP_KEYS)
+        if centroid is None or temp is None:
+            continue
+        lat, lon = centroid
+        cells.append(TemperatureCell(lat=lat, lon=lon, temp_c=float(temp), cell_id=cell_id_for(lat, lon)))
+    return cells  # possibly [] -- a real FeatureCollection with zero tiles (no coverage), not "not found"
 
 
 class SchemaMismatchError(Exception):
@@ -118,19 +183,22 @@ def parse_heatmap_response(
     to reliably echo them back. Raises SchemaMismatchError if no records list
     with lat/lon/temperature fields can be found anywhere in the payload.
     """
-    records = _find_records_list(raw)
-    if not records:
-        raise SchemaMismatchError(raw)
+    cells = _try_geojson_polygons(raw)
 
-    cells: list[TemperatureCell] = []
-    for record in records:
-        lat = _first_present(record, LAT_KEYS)
-        lon = _first_present(record, LON_KEYS)
-        temp = _first_present(record, TEMP_KEYS)
-        if lat is None or lon is None or temp is None:
-            continue
-        lat, lon, temp = float(lat), float(lon), float(temp)
-        cells.append(TemperatureCell(lat=lat, lon=lon, temp_c=temp, cell_id=cell_id_for(lat, lon)))
+    if cells is None:
+        records = _find_records_list(raw)
+        if not records:
+            raise SchemaMismatchError(raw)
+
+        cells = []
+        for record in records:
+            lat = _first_present(record, LAT_KEYS)
+            lon = _first_present(record, LON_KEYS)
+            temp = _first_present(record, TEMP_KEYS)
+            if lat is None or lon is None or temp is None:
+                continue
+            lat, lon, temp = float(lat), float(lon), float(temp)
+            cells.append(TemperatureCell(lat=lat, lon=lon, temp_c=temp, cell_id=cell_id_for(lat, lon)))
 
     if not cells:
         raise SchemaMismatchError(raw)

@@ -10,7 +10,7 @@ exceptions propagate; nothing here returns an HTTP response directly.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import networkx as nx
@@ -18,7 +18,7 @@ import pandas as pd
 from fastapi import Request
 
 from app.grid import store as grid_store
-from app.grid.schema import TemperatureGrid
+from app.grid.schema import GridSource, TemperatureGrid
 from app.heat.wbgt import DEFAULT_RH_PCT, DEFAULT_SOLAR_WM2, DEFAULT_WIND_MS
 from app.ingest.openmeteo import OpenMeteoClient
 from app.ml.features import BUCKET_NAMES
@@ -106,10 +106,16 @@ def assert_within_aoi(lat: float, lon: float, bbox: str) -> None:
         raise OutOfAOIError(f"({lat}, {lon}) is outside the configured AOI bbox {bbox}")
 
 
+LIVE_GRID_FRESHNESS = timedelta(hours=3)
+
+
 def get_grid_for_timestamp(bbox: str, at: datetime, granularity_m: int, allow_fixture: bool) -> TemperatureGrid:
     """A TemperatureGrid for `at`: a stored LIVE grid if one exists at that exact
-    timestamp, else a freshly-generated FIXTURE grid (unless allow_fixture is
-    False, in which case that's a clear error rather than a silent substitution).
+    timestamp, else the most recent LIVE grid within LIVE_GRID_FRESHNESS (a
+    live snapshot a few minutes/hours stale is still real data, not synthetic
+    -- scripts/fetch_fortyguard_grid.py is what populates these), else a
+    freshly-generated FIXTURE grid (unless allow_fixture is False, in which
+    case that's a clear error rather than a silent substitution).
     """
     if at.tzinfo is None:
         at = at.replace(tzinfo=timezone.utc)
@@ -118,10 +124,18 @@ def get_grid_for_timestamp(bbox: str, at: datetime, granularity_m: int, allow_fi
     if stored_path.exists():
         return grid_store.load_grid(stored_path)
 
+    window_start = at - LIVE_GRID_FRESHNESS
+    for ts in reversed(grid_store.list_available(window_start, at)):
+        candidate_path = grid_store._grid_path(grid_store.DEFAULT_BASE_DIR, ts)
+        grid = grid_store.load_grid(candidate_path)
+        if grid.bbox == bbox and grid.source == GridSource.LIVE:
+            return grid
+
     if not allow_fixture:
         raise NoGridAvailableError(
-            f"No stored LIVE grid available at {at.isoformat()} for bbox={bbox}, and fixture data is "
-            "disabled (ALLOW_FIXTURE_DATA=False)."
+            f"No stored LIVE grid available at {at.isoformat()} (or within the last "
+            f"{LIVE_GRID_FRESHNESS}) for bbox={bbox}, and fixture data is disabled "
+            "(ALLOW_FIXTURE_DATA=False)."
         )
 
     from app.fortyguard.fixtures import generate_grid  # local import: keeps fixtures optional at module load

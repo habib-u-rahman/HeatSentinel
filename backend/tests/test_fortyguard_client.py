@@ -57,14 +57,14 @@ async def test_poll_retries_until_done(client):
     with respx.mock:
         route = respx.get(poll_url)
         route.side_effect = [
-            Response(200, json={"data": {"status": "processing"}}),
-            Response(200, json={"data": {"status": "processing"}}),
-            Response(200, json={"data": {"status": "done", "result": {"foo": "bar"}}}),
+            Response(200, json={"data": {"status": "Processing"}}),
+            Response(200, json={"data": {"status": "Processing"}}),
+            Response(200, json={"data": {"status": "Completed", "result": {"foo": "bar"}}}),
         ]
 
         result = await client.poll_result(activity_id, timeout_s=5, interval_s=0.01)
 
-        assert result["data"]["status"] == "done"
+        assert result["data"]["status"] == "Completed"
         assert route.call_count == 3
 
     await client.aclose()
@@ -79,7 +79,7 @@ async def test_cache_prevents_second_http_call(client):
             return_value=Response(200, json={"data": {"activity_id": activity_id}})
         )
         poll_route = respx.get(poll_url).mock(
-            return_value=Response(200, json={"data": {"status": "done", "result": {"foo": "bar"}}})
+            return_value=Response(200, json={"data": {"status": "Completed", "result": {"foo": "bar"}}})
         )
 
         result1 = await client.get_heatmap(
