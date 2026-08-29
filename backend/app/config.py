@@ -5,6 +5,12 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/app/config.py -> backend/app -> backend -> repo root. Anchored on
+# __file__ rather than a "../" relative path so CACHE_DIR resolves correctly
+# regardless of the process's working directory (e.g. serverless runtimes
+# that don't cd into backend/ before starting the app).
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 class Settings(BaseSettings):
     """App configuration loaded from environment / .env file."""
@@ -17,7 +23,7 @@ class Settings(BaseSettings):
     CITY_NAME: str
     AOI_BBOX: str  # "min_lon,min_lat,max_lon,max_lat"
     GRID_GRANULARITY_M: int = 100
-    CACHE_DIR: Path = Path("../data/cache")
+    CACHE_DIR: Path = _PROJECT_ROOT / "data" / "cache"
     MAPILLARY_TOKEN: str = ""  # optional: only needed by scripts/fetch_images.py
     ALLOW_FIXTURE_DATA: bool = True  # dev default; flip to False before a demo so app.grid.store refuses to load synthetic FIXTURE grids
 

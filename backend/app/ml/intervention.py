@@ -29,7 +29,8 @@ from app.vision import metrics as vision_metrics
 
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = Path("../models/rf_intervention.pkl")
+# backend/app/ml/intervention.py -> backend/app/ml -> backend/app -> backend -> repo root.
+MODEL_PATH = Path(__file__).resolve().parents[3] / "models" / "rf_intervention.pkl"
 
 # Bucket-fraction deltas applied directly to the surface-composition fractions
 # (renormalized to sum to 1.0, clipped at 0 first so no bucket goes negative).

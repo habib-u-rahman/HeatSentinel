@@ -10,6 +10,7 @@ from the backend/ directory:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -38,16 +39,29 @@ from app.routing.router import RouteNotFoundError, SnapDistanceExceededError
 
 logger = logging.getLogger(__name__)
 
+# backend/app/main.py -> backend/app -> backend -> repo root. Anchored on
+# __file__ (not a "../" relative path) so these resolve correctly regardless
+# of the process's working directory.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 CONNECTED_GRAPH_FILENAME = "walk_graph_connected.graphml"
-MODEL_PATH = Path("../models/rf_intervention.pkl")
-SAMPLE_POINTS_PATH = Path("../data/raw/sample_points.parquet")
-SURFACE_PROFILES_PATH = Path("../data/raw/surface_profiles.parquet")
-VULNERABLE_POIS_PATH = Path("../data/raw/vulnerable_pois.parquet")
-STATIC_IMAGES_DIR = Path("../data/street_images")
-STATIC_OVERLAYS_DIR = Path("../data/overlays")
+MODEL_PATH = _PROJECT_ROOT / "models" / "rf_intervention.pkl"
+SAMPLE_POINTS_PATH = _PROJECT_ROOT / "data" / "raw" / "sample_points.parquet"
+SURFACE_PROFILES_PATH = _PROJECT_ROOT / "data" / "raw" / "surface_profiles.parquet"
+VULNERABLE_POIS_PATH = _PROJECT_ROOT / "data" / "raw" / "vulnerable_pois.parquet"
+STATIC_IMAGES_DIR = _PROJECT_ROOT / "data" / "street_images"
+STATIC_OVERLAYS_DIR = _PROJECT_ROOT / "data" / "overlays"
 STATIC_CACHE_MAX_AGE_S = 3600
 
-CORS_ORIGINS = ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:3000"]
+# Extra allowed origins (e.g. the deployed frontend URL) come from the
+# CORS_EXTRA_ORIGINS env var (comma-separated) so a new frontend deployment
+# doesn't require a code change -- just an env var + redeploy.
+CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:3000",
+] + [origin.strip() for origin in os.environ.get("CORS_EXTRA_ORIGINS", "").split(",") if origin.strip()]
 
 
 @asynccontextmanager
@@ -113,9 +127,15 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)  # grid payloads are large
 # Static street-level images + segmentation overlays, for the demo. Directories
 # are created (possibly empty) so the mount never fails even before any
 # images/overlays have been fetched/generated -- individual missing files still
-# 404 normally.
-STATIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-STATIC_OVERLAYS_DIR.mkdir(parents=True, exist_ok=True)
+# 404 normally. mkdir is a no-op when the dir already exists (true whenever
+# these are bundled into the deployment), so this stays safe even on a
+# read-only serverless filesystem; it only actually attempts a write when the
+# dir is genuinely missing, which OSError-guards against crashing app startup.
+try:
+    STATIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    STATIC_OVERLAYS_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    logger.warning("static_dir_mkdir_failed -- read-only filesystem and dirs not bundled")
 app.mount("/static/images", StaticFiles(directory=STATIC_IMAGES_DIR), name="static_images")
 app.mount("/static/overlays", StaticFiles(directory=STATIC_OVERLAYS_DIR), name="static_overlays")
 

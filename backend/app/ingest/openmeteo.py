@@ -65,7 +65,10 @@ class OpenMeteoClient:
         request_timeout_s: float = 30.0,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir is not None else Path(get_settings().CACHE_DIR) / "openmeteo"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning("openmeteo_cache_dir_mkdir_failed dir=%s -- read-only filesystem", self.cache_dir)
         self._client = http_client
         self._owns_client = http_client is None
         self.request_timeout_s = request_timeout_s
@@ -135,7 +138,10 @@ class OpenMeteoClient:
             }
             response = self._get(FORECAST_URL, params)
             payload = response.json()
-            cache_path.write_text(json.dumps(payload), encoding="utf-8")
+            try:
+                cache_path.write_text(json.dumps(payload), encoding="utf-8")
+            except OSError:
+                logger.warning("openmeteo_cache_write_failed path=%s -- read-only filesystem, skipping", cache_path)
 
         hourly = payload.get("hourly", {})
         return pd.DataFrame(

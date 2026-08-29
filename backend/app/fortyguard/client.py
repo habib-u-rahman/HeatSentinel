@@ -106,7 +106,10 @@ class FortyGuardClient:
         self.api_key = api_key
         self.base_url = str(base_url).rstrip("/")
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning("fortyguard_cache_dir_mkdir_failed dir=%s -- read-only filesystem", self.cache_dir)
         self.request_timeout_s = request_timeout_s
 
         self._client = http_client
@@ -151,8 +154,11 @@ class FortyGuardClient:
 
     def _write_cache(self, payload_hash: str, result: dict) -> None:
         path = self._cache_path(payload_hash)
-        with path.open("w", encoding="utf-8") as f:
-            json.dump(result, f)
+        try:
+            with path.open("w", encoding="utf-8") as f:
+                json.dump(result, f)
+        except OSError:
+            logger.warning("fortyguard_cache_write_failed path=%s -- read-only filesystem, skipping", path)
 
     # -- HTTP --------------------------------------------------------------
 
