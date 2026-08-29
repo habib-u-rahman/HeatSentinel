@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request, status
@@ -40,8 +40,16 @@ from app.api.schemas import (
 )
 from app.core.geo import MAX_AREA_KM2, bbox_around, bbox_area_km2
 from app.ingest.geocode import NominatimClient
-from app.pipeline.build_aoi import AoiBuildResult, NoImageryError, run_aoi_build, slugify
 from app.routing.graph import _annotate_edges
+
+# app.pipeline.build_aoi pulls in torch/transformers/ultralytics (the vision
+# pipeline) at import time -- deferred to a lazy import inside the functions
+# that actually run a build, so the base API process doesn't pay that memory
+# cost until someone actually triggers an AOI build. AoiBuildResult is only
+# ever used as a type annotation here (never instantiated), so with `from
+# __future__ import annotations` a TYPE_CHECKING-only import is enough.
+if TYPE_CHECKING:
+    from app.pipeline.build_aoi import AoiBuildResult
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +58,8 @@ router = APIRouter()
 # Real coverage below this is still shown (never hidden/fabricated up), just
 # flagged as degraded rather than presented as a normal success.
 DEGRADED_COVERAGE_THRESHOLD_PCT = 25.0
-AOIS_BASE_DIR = Path("../data/aois")
+# backend/app/api/routes/aoi.py -> .../routes -> .../api -> backend/app -> backend -> repo root.
+AOIS_BASE_DIR = Path(__file__).resolve().parents[4] / "data" / "aois"
 
 
 @dataclass
@@ -75,6 +84,8 @@ def _run_job(app, job: AoiBuildJob, bbox: str, city_name: str, n_points: int, ao
     is blocking (OSM/Overpass/Mapillary network calls + CPU-bound CV
     inference), so this must never run directly on the event loop.
     """
+    from app.pipeline.build_aoi import NoImageryError, run_aoi_build
+
     global _active_job_id
     job.status = "running"
 
@@ -156,6 +167,8 @@ def _result_to_schema(result: AoiBuildResult) -> AoiBuildResultSchema:
 
 @router.post("/aoi/build", response_model=AoiBuildQueuedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def post_aoi_build(body: AoiBuildRequest, request: Request) -> AoiBuildQueuedResponse:
+    from app.pipeline.build_aoi import slugify
+
     global _active_job_id
     with _jobs_lock:
         if _active_job_id is not None and _jobs[_active_job_id].status in ("queued", "running"):
