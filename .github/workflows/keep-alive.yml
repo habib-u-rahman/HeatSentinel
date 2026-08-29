@@ -15,4 +15,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping HeatSentinel backend health endpoint
-        run: curl -sS -f --max-time 60 https://heatsentinel-backend.onrender.com/api/health || true
+        run: curl -sS -f --max-time 60 https://heatsentinel-backend.onrender.com/api/ping || true

@@ -11,6 +11,18 @@ from app.config import get_settings
 router = APIRouter()
 
 
+@router.get("/ping")
+async def ping() -> dict:
+    """Cheap liveness probe -- no grid/graph/model work, just "is the process up".
+
+    Point platform-level health checks (Render, load balancers, uptime
+    pings) here, not at /health: /health computes a real grid on every call,
+    and a monitor hitting that every few seconds on a memory-constrained
+    instance can itself cause the very OOM restarts it's meant to catch.
+    """
+    return {"status": "ok"}
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
     settings = get_settings()
