@@ -62,7 +62,7 @@ class OpenMeteoClient:
         self,
         cache_dir: Optional[Path] = None,
         http_client: Optional[httpx.Client] = None,
-        request_timeout_s: float = 30.0,
+        request_timeout_s: float = 6.0,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir is not None else Path(get_settings().CACHE_DIR) / "openmeteo"
         try:
